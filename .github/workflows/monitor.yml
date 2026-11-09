@@ -7,6 +7,11 @@ on:
   workflow_dispatch:
     # Permite execução manual a qualquer momento pelo painel do GitHub Actions
     inputs:
+      channel_id:
+        description: 'ID customizado do canal do Discord (opcional, deixe vazio para usar o padrão)'
+        required: false
+        default: ''
+        type: string
       dry_run:
         description: 'Executar em modo Simulação (dry-run sem postar no Discord)?'
         required: false
@@ -45,7 +50,7 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
-          DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
+          DISCORD_CHANNEL_ID: ${{ inputs.channel_id != '' && inputs.channel_id || vars.DISCORD_CHANNEL_ID || secrets.DISCORD_CHANNEL_ID }}
           DISCORD_BOT_NAME: ${{ secrets.DISCORD_BOT_NAME || 'ObjectWatcher' }}
           DISCORD_AVATAR_URL: ${{ secrets.DISCORD_AVATAR_URL || 'https://raw.githubusercontent.com/objectdata/objectwatcher/main/Foto_perfil.jpg' }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

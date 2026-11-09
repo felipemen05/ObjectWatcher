@@ -29,6 +29,45 @@ class DiscordNotifier:
         self.bot_name = bot_name or settings.discord_bot_name
         self.avatar_url = avatar_url or settings.discord_avatar_url
 
+    def list_available_channels(self) -> list[dict[str, Any]]:
+        """Lista todos os canais de texto disponíveis nos servidores em que o bot está presente."""
+        if not self.bot_token:
+            logger.warning("Bot token não configurado. Não é possível listar canais.")
+            return []
+
+        headers = {"Authorization": f"Bot {self.bot_token}"}
+        channels: list[dict[str, Any]] = []
+
+        try:
+            # 1. Obtém as guildas (servidores) onde o bot está presente
+            resp_guilds = requests.get("https://discord.com/api/v10/users/@me/guilds", headers=headers, timeout=10)
+            if resp_guilds.status_code != 200:
+                logger.error(f"Erro ao buscar servidores (HTTP {resp_guilds.status_code}): {resp_guilds.text}")
+                return []
+
+            guilds = resp_guilds.json()
+            for guild in guilds:
+                guild_id = guild.get("id")
+                guild_name = guild.get("name")
+
+                # 2. Obtém os canais da guilda
+                resp_ch = requests.get(f"https://discord.com/api/v10/guilds/{guild_id}/channels", headers=headers, timeout=10)
+                if resp_ch.status_code == 200:
+                    for ch in resp_ch.json():
+                        # Tipo 0 = Canal de texto tradicional
+                        if ch.get("type") == 0:
+                            channels.append({
+                                "guild_id": guild_id,
+                                "guild_name": guild_name,
+                                "channel_id": ch.get("id"),
+                                "channel_name": ch.get("name"),
+                                "topic": ch.get("topic") or ""
+                            })
+        except Exception as e:
+            logger.error(f"Erro de conexão ao listar canais do Discord: {e}")
+
+        return channels
+
     def _is_configured(self) -> bool:
         """Verifica se há ao menos um método de envio configurado (Webhook ou Bot Token)."""
         has_webhook = bool(self.webhook_url and "discord.com/api/webhooks" in self.webhook_url)

@@ -43,6 +43,13 @@ class DatabaseManager:
                 CREATE INDEX IF NOT EXISTS idx_monitored_items_source 
                 ON monitored_items (source)
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS app_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
             conn.commit()
 
     @staticmethod
@@ -98,6 +105,22 @@ class DatabaseManager:
                 LIMIT ?
             """, (limit,))
             return [dict(row) for row in cur.fetchall()]
+
+    def get_setting(self, key: str, default: Optional[str] = None) -> Optional[str]:
+        """Obtém uma configuração dinâmica salva no banco de dados."""
+        with self._get_connection() as conn:
+            cur = conn.execute("SELECT value FROM app_settings WHERE key = ?", (key,))
+            row = cur.fetchone()
+            return row["value"] if row else default
+
+    def set_setting(self, key: str, value: str) -> None:
+        """Salva ou atualiza uma configuração dinâmica no banco de dados."""
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT OR REPLACE INTO app_settings (key, value, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+            """, (key, str(value)))
+            conn.commit()
 
     def get_stats(self) -> Dict[str, Any]:
         """Retorna estatísticas de monitoramento."""

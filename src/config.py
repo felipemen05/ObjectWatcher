@@ -46,7 +46,29 @@ class Config:
 
     @property
     def discord_channel_id(self) -> str:
-        return os.getenv("DISCORD_CHANNEL_ID") or self.raw_config.get("discord", {}).get("channel_id", "")
+        # 1. Variável de ambiente (prioridade mais alta)
+        env_val = os.getenv("DISCORD_CHANNEL_ID")
+        if env_val and env_val.strip():
+            return env_val.strip()
+
+        # 2. Arquivo config.yaml
+        cfg_val = self.raw_config.get("discord", {}).get("channel_id", "")
+        if cfg_val and str(cfg_val).strip():
+            return str(cfg_val).strip()
+
+        # 3. Configuração dinâmica salva no banco de dados SQLite
+        try:
+            import sqlite3
+            if self.database_path.exists():
+                with sqlite3.connect(str(self.database_path)) as conn:
+                    cur = conn.execute("SELECT value FROM app_settings WHERE key = 'target_channel_id'")
+                    row = cur.fetchone()
+                    if row and row[0]:
+                        return str(row[0]).strip()
+        except Exception:
+            pass
+
+        return ""
 
     @property
     def discord_bot_name(self) -> str:

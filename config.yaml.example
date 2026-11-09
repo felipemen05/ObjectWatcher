@@ -15,6 +15,8 @@ bot:
 
 discord:
   webhook_url: ""          # Pode ser definido aqui ou via variável de ambiente DISCORD_WEBHOOK_URL
+  bot_token: ""            # Opcional se usar Bot Token
+  channel_id: ""           # ID do canal (pode ser alterado dinamicamente com py main.py --set-channel ou no Discord com !canal)
   rate_limit_delay_seconds: 1.5
   attach_files: true       # Envia arquivos (PDFs de NTs, ZIPs de Schemas) diretamente no Discord
   max_attachment_size_mb: 25

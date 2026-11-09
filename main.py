@@ -70,6 +70,33 @@ def main():
         help="Envia uma mensagem de teste rica para validar o Webhook do Discord."
     )
     parser.add_argument(
+        "--listen",
+        action="store_true",
+        help="Inicia o bot em modo de escuta para aceitar comandos interativos como '!canal' diretamente no Discord."
+    )
+    parser.add_argument(
+        "--list-channels",
+        action="store_true",
+        help="Lista todos os servidores e canais do Discord acessíveis pelo bot."
+    )
+    parser.add_argument(
+        "--select-channel",
+        action="store_true",
+        help="Permite escolher interativamente o canal do Discord pelo terminal."
+    )
+    parser.add_argument(
+        "--set-channel",
+        type=str,
+        metavar="CHANNEL_ID",
+        help="Define e salva o canal do Discord onde os alertas serão postados."
+    )
+    parser.add_argument(
+        "--channel-id",
+        type=str,
+        metavar="CHANNEL_ID",
+        help="Sobrescreve o canal do Discord apenas para esta execução."
+    )
+    parser.add_argument(
         "--stats",
         action="store_true",
         help="Exibe estatísticas de itens já capturados e salvos no banco SQLite."
@@ -85,17 +112,87 @@ def main():
 
     # 1. Comando de Teste do Discord
     if args.test_discord:
-        print("\n[ObjectWatcher] Testando conectividade com o Discord Webhook...")
-        notifier = DiscordNotifier()
+        print("\n[ObjectWatcher] Testando conectividade com o Discord...")
+        channel_id = args.channel_id or settings.discord_channel_id
+        notifier = DiscordNotifier(channel_id=channel_id)
         success = notifier.send_test_message()
         if success:
-            print("[ObjectWatcher] Sucesso! Verifique o canal no Discord.\n")
+            print("[ObjectWatcher] Sucesso! Verifique a mensagem no canal do Discord.\n")
             sys.exit(0)
         else:
-            print("[ObjectWatcher] Erro: Falha ao enviar mensagem de teste. Verifique sua DISCORD_WEBHOOK_URL.\n")
+            print("[ObjectWatcher] Erro: Falha ao enviar mensagem de teste. Verifique suas configurações.\n")
             sys.exit(1)
 
-    # 2. Comando de Estatísticas
+    # 2. Modo de Escuta para Comandos do Discord (!canal)
+    if args.listen:
+        from src.bot_listener import start_bot_listener
+        start_bot_listener()
+        sys.exit(0)
+
+    # 3. Listagem de Canais Disponíveis
+    if args.list_channels:
+        notifier = DiscordNotifier()
+        channels = notifier.list_available_channels()
+        print("\n==================================================")
+        print("📢 Canais do Discord Acessíveis pelo ObjectWatcher")
+        print("==================================================")
+        if not channels:
+            print("Nenhum canal encontrado. Verifique se o bot foi adicionado ao seu servidor.")
+        else:
+            current_id = settings.discord_channel_id
+            for ch in channels:
+                is_active = " [CANAL ATIVO ATUALMENTE]" if ch["channel_id"] == current_id else ""
+                print(f"Servidor: {ch['guild_name']}")
+                print(f"  • #{ch['channel_name']} (ID: {ch['channel_id']}){is_active}\n")
+        print("==================================================\n")
+        sys.exit(0)
+
+    # 3. Definição Direta de Canal
+    if args.set_channel:
+        db = DatabaseManager()
+        db.set_setting("target_channel_id", args.set_channel.strip())
+        print(f"\n✅ [ObjectWatcher] Canal padrão atualizado para o ID: {args.set_channel.strip()}")
+        print("Enviando mensagem de confirmação para o canal...")
+        notifier = DiscordNotifier(channel_id=args.set_channel.strip())
+        notifier.send_test_message()
+        print("[Concluído] O canal foi salvo dinamicamente e está ativo!\n")
+        sys.exit(0)
+
+    # 4. Seleção Interativa de Canal
+    if args.select_channel:
+        notifier = DiscordNotifier()
+        channels = notifier.list_available_channels()
+        if not channels:
+            print("\n[Erro] Nenhum canal disponível. Adicione o bot ao seu servidor primeiro.\n")
+            sys.exit(1)
+
+        print("\n==================================================")
+        print("🎯 Escolha o Canal para Notificações Fiscais")
+        print("==================================================")
+        current_id = settings.discord_channel_id
+        for i, ch in enumerate(channels, 1):
+            is_active = " (ATUAL)" if ch["channel_id"] == current_id else ""
+            print(f"[{i}] {ch['guild_name']} -> #{ch['channel_name']}{is_active}")
+
+        print("==================================================")
+        try:
+            choice = input("\nDigite o número do canal desejado (ou Enter para cancelar): ").strip()
+            if choice.isdigit() and 1 <= int(choice) <= len(channels):
+                selected = channels[int(choice) - 1]
+                db = DatabaseManager()
+                db.set_setting("target_channel_id", selected["channel_id"])
+                print(f"\n✅ Canal #{selected['channel_name']} configurado com sucesso!")
+                print("Enviando confirmação no Discord...")
+                notifier = DiscordNotifier(channel_id=selected["channel_id"])
+                notifier.send_test_message()
+                print("Pronto! As próximas notificações serão enviadas neste canal.\n")
+            else:
+                print("Operação cancelada.\n")
+        except KeyboardInterrupt:
+            print("\nCancelado.\n")
+        sys.exit(0)
+
+    # 5. Comando de Estatísticas
     if args.stats:
         db = DatabaseManager()
         stats = db.get_stats()
@@ -112,8 +209,10 @@ def main():
         print("==================================================\n")
         sys.exit(0)
 
-    # 3. Execução do Monitor
+    # 6. Execução do Monitor
     watcher = ObjectWatcher()
+    if args.channel_id:
+        watcher.notifier.channel_id = args.channel_id.strip()
 
     pid_file = settings.database_path.parent / "objectwatcher.pid"
 
