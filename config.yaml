@@ -1,0 +1,109 @@
+# ==============================================================================
+# ObjectWatcher - Arquivo de Configuração Principal (ObjectData)
+# ==============================================================================
+
+bot:
+  name: "ObjectWatcher"
+  # URL pública da foto de perfil da empresa (ex: Foto_perfil.jpg hospedada)
+  avatar_url: "https://raw.githubusercontent.com/objectdata/objectwatcher/main/Foto_perfil.jpg"
+  
+  # Cores hexadecimais dos Embeds no Discord:
+  colors:
+    urgent: 0xE74C3C       # Vermelho: Novas regras de rejeição, paradas de serviço, quebra de layout
+    attention: 0xE67E22    # Laranja: Prazos futuros de homologação/produção, novas NTs publicadas
+    info: 0x3498DB         # Azul: Comunicados institucionais, esclarecimentos, manuais
+
+discord:
+  webhook_url: ""          # Pode ser definido aqui ou via variável de ambiente DISCORD_WEBHOOK_URL
+  rate_limit_delay_seconds: 1.5
+  attach_files: true       # Envia arquivos (PDFs de NTs, ZIPs de Schemas) diretamente no Discord
+  max_attachment_size_mb: 25
+
+storage:
+  save_local_archive: true # Salva cópia local em pasta datada (downloads/YYYY-MM-DD/)
+  archive_dir: "downloads"
+
+ai:
+  provider: "gemini"
+  api_key: ""              # Pode ser definido aqui ou via variável de ambiente GEMINI_API_KEY
+  model: "gemini-3.8-flash"
+  timeout_seconds: 30
+  max_tokens: 1500
+
+database:
+  path: "data/objectwatcher.db"
+
+scheduler:
+  interval_minutes: 60
+
+# Módulos de monitoramento ativos e suas fontes
+sources:
+  # 1. NF-e e NFC-e (SEFAZ / Portal Nacional)
+  nfe_sefaz:
+    enabled: true
+    portal_url: "https://www.nfe.fazenda.gov.br/portal/principal.aspx"
+    notas_tecnicas_url: "https://www.nfe.fazenda.gov.br/portal/listaConteudo.aspx?tipoConteudo=04BIflQt1aY="
+    esquemas_xml_url: "https://www.nfe.fazenda.gov.br/portal/listaConteudo.aspx?tipoConteudo=BMPFMBoln3w="
+    informes_tecnicos_url: "https://www.nfe.fazenda.gov.br/portal/listaConteudo.aspx?tipoConteudo=hXzemuyNHW4="
+    download_pdfs_for_ai: true   # Baixa primeiras páginas de PDFs de NTs para análise minuciosa por IA
+    max_items_per_check: 10
+
+  # 2. NFS-e Nacional (gov.br/nfse)
+  nfse_nacional:
+    enabled: true
+    noticias_url: "https://www.gov.br/nfse/pt-br/noticias"
+    max_items_per_check: 10
+
+  # 3. SPED e Legislação Tributária Federal (Receita Federal / SPED)
+  sped_rfb:
+    enabled: true
+    sped_url: "http://sped.rfb.gov.br/"
+    receita_noticias_url: "https://www.gov.br/receitafederal/pt-br/assuntos/noticias"
+    max_items_per_check: 10
+
+  # 4. Comunidade Dev Fiscal (RSS Fórum ACBr)
+  acbr_community:
+    enabled: true
+    feeds:
+      - name: "ACBr - Notícias Fiscais"
+        url: "https://www.projetoacbr.com.br/forum/forum/35-not%C3%ADcias-do-acbr.xml/"
+      - name: "ACBr - Legislação Fiscal e Tributária"
+        url: "https://www.projetoacbr.com.br/forum/forum/5-legisla%C3%A7%C3%A3o-fiscal-e-tribut%C3%A1ria.xml/"
+    max_items_per_check: 10
+
+# Palavras-chave de relevância para filtrar matérias institucionais irrelevantes
+relevance_keywords:
+  - "nota técnica"
+  - "nt 20"
+  - "schema"
+  - "xsd"
+  - "layout"
+  - "leiaute"
+  - "nfe"
+  - "nf-e"
+  - "nfce"
+  - "nfc-e"
+  - "nfse"
+  - "nfs-e"
+  - "simples nacional"
+  - "mei"
+  - "cgsn"
+  - "rejeicao"
+  - "rejeição"
+  - "pis"
+  - "cofins"
+  - "ipi"
+  - "ibs"
+  - "cbs"
+  - "reforma tributária"
+  - "reforma tributaria"
+  - "sped"
+  - "efd"
+  - "ecf"
+  - "ecd"
+  - "ncm"
+  - "cest"
+  - "cst"
+  - "csosn"
+  - "sinief"
+  - "cotepe"

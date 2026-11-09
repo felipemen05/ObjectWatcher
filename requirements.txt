@@ -1,0 +1,8 @@
+# Dependências do ObjectWatcher - Monitor Fiscal da ObjectData
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+feedparser>=6.0.10
+pyyaml>=6.0.1
+pypdf>=4.0.0
+python-dotenv>=1.0.0
+

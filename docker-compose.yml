@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  objectwatcher:
+    build: .
+    container_name: objectwatcher-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      # Persistência do banco SQLite de deduplicação entre restarts do container
+      - ./data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: ["python", "main.py", "--loop", "--interval", "60"]
+

@@ -1,0 +1,68 @@
+name: ObjectWatcher - Monitor Fiscal Contínuo
+
+on:
+  schedule:
+    # Executa a cada 1 hora (no minuto 0)
+    - cron: '0 * * * *'
+  workflow_dispatch:
+    # Permite execução manual a qualquer momento pelo painel do GitHub Actions
+    inputs:
+      dry_run:
+        description: 'Executar em modo Simulação (dry-run sem postar no Discord)?'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  check-fiscal-portals:
+    name: Monitorar Portais Fiscais e Governamentais
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do Código
+        uses: actions/checkout@v4
+
+      - name: Configurar Ambiente Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Instalar Dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Restaurar Banco de Dados SQLite (Deduplicação)
+        uses: actions/cache@v4
+        with:
+          path: data/objectwatcher.db
+          key: objectwatcher-db-${{ github.run_id }}
+          restore-keys: |
+            objectwatcher-db-
+
+      - name: Executar Ciclo de Monitoramento do ObjectWatcher
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
+          DISCORD_BOT_NAME: ${{ secrets.DISCORD_BOT_NAME || 'ObjectWatcher' }}
+          DISCORD_AVATAR_URL: ${{ secrets.DISCORD_AVATAR_URL || 'https://raw.githubusercontent.com/objectdata/objectwatcher/main/Foto_perfil.jpg' }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ secrets.GEMINI_MODEL || 'gemini-3.8-flash' }}
+          ATTACH_FILES_TO_DISCORD: 'true'
+          SAVE_LOCAL_ARCHIVE: 'false'
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            python main.py --run-once --dry-run
+          else
+            python main.py --run-once
+          fi
+
+      - name: Salvar Estado do Banco SQLite (Cache)
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: data/objectwatcher.db
+          key: objectwatcher-db-${{ github.run_id }}
+
