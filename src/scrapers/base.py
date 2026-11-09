@@ -57,6 +57,48 @@ class BaseScraper(ABC):
         lower_text = text.lower()
         return any(kw.lower() in lower_text for kw in settings.relevance_keywords)
 
+    @staticmethod
+    def classify_fiscal_urgency(title: str, text: str) -> tuple[str, list[str]]:
+        """
+        Classifica previamente a criticidade fiscal de uma publicação (sem custo de IA).
+        Retorna ('ALTO', [motivos]) para notícias que exigem alerta em VERMELHO no ERP,
+        ou ('INFORMATIVO', []) para avisos de rotina/baixa criticidade.
+        """
+        combined = f"{title}\n{text}".lower()
+        matched_reasons: list[str] = []
+
+        # 1. Regras de Rejeição, Erros e Falhas Impeditivas
+        if re.search(r"\b(?:rejeição|rejeicao|rejeitado|rejeitada|erro\s+\d{3}|falha\s+no\s+schema)\b", combined):
+            matched_reasons.append("Regras de Rejeição / Erro de Validação")
+
+        # 2. Notas Técnicas e Pacotes de Schemas XML (.xsd)
+        if re.search(r"\b(?:nota\s+t[eé]cnica|nt\s*\d{4}|nt\s*0\d{2}|schemas?\s+xml|pacote\s+de\s+libera[cç][aã]o|\.xsd)\b", combined):
+            matched_reasons.append("Nota Técnica / Schemas XML (.xsd)")
+
+        # 3. Alterações de Leiaute ou Tags XML
+        if re.search(r"\b(?:leiaute|layout|novos?\s+campos?|novas?\s+tags?|<[a-zA-Z0-9_]+>)\b", combined):
+            matched_reasons.append("Alteração de Leiaute / Tags XML")
+
+        # 4. Prazos Fatais, Obrigatoriedades e Viradas de Chave
+        if re.search(r"\b(?:obrigatoriedade|obrigat[oó]ri[ao]|virada\s+de\s+chave|entrada\s+em\s+vigor|prazo\s+de\s+implanta[cç][aã]o|prazo\s+fatal)\b", combined):
+            matched_reasons.append("Obrigatoriedade / Prazo de Implantação")
+
+        # 5. Indisponibilidade, Instabilidade ou Manutenção de SEFAZ
+        if re.search(r"\b(?:indisponibilidade|instabilidade|fora\s+do\s+ar|manuten[cç][aã]o\s+programada|bloqueio)\b", combined):
+            matched_reasons.append("Indisponibilidade / Instabilidade de Serviços")
+
+        # 6. Reforma Tributária (IBS/CBS, Split Payment) e Atos Técnicos
+        if re.search(r"\b(?:ibs|cbs|split\s+payment|reforma\s+tribut[aá]ria|ato\s+t[eé]cnico|ato\s+conjunto|resolu[cç][aã]o\s+cgsn)\b", combined):
+            matched_reasons.append("Reforma Tributária / Atos Normativos (IBS/CBS)")
+
+        # 7. Descontinuação ou Extinção de Serviços
+        if re.search(r"\b(?:descontinua[cç][aã]o|descontinuad[oa]|inutiliza[cç][aã]o|autoriza[cç][aã]o\s+ass[ií]ncrona|revoga[cç][aã]o)\b", combined):
+            matched_reasons.append("Descontinuação / Extinção de Serviços")
+
+        if matched_reasons:
+            return "ALTO", matched_reasons
+        return "INFORMATIVO", []
+
     def download_file(self, url: str, max_size_mb: int = 25) -> Optional[Tuple[str, bytes]]:
         """
         Baixa um arquivo anexo oficial (PDF de Nota Técnica, ZIP de Schemas XML, manuais).

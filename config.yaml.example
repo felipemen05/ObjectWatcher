@@ -7,6 +7,11 @@ bot:
   # URL pública da foto de perfil da empresa (ex: Foto_perfil.jpg hospedada)
   avatar_url: "https://raw.githubusercontent.com/objectdata/objectwatcher/main/Foto_perfil.jpg"
   
+  # Filtro de Criticidade e Economia de Tokens:
+  # Se true, analisa com IA e envia ao Discord APENAS publicações de ALTA URGÊNCIA (marcadas em VERMELHO).
+  # Avisos de rotina ou comunicados informativos são ignorados sem gastar tokens da API Gemini.
+  filter_only_urgent: true
+
   # Cores hexadecimais dos Embeds no Discord:
   colors:
     urgent: 0xE74C3C       # Vermelho: Novas regras de rejeição, paradas de serviço, quebra de layout

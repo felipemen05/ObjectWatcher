@@ -55,6 +55,7 @@ class ObjectWatcher:
         """
         logger.info("=== Iniciando ciclo de monitoramento fiscal ===")
         total_scraped = 0
+        total_filtered = 0
         total_new = 0
         total_notified = 0
 
@@ -73,16 +74,46 @@ class ObjectWatcher:
                         logger.debug(f"Item já processado anteriormente: {item.title}")
                         continue
 
-                    total_new += 1
-                    logger.info(f"✨ Nova publicação detectada: {item.title}")
+                    # Classificação prévia de urgência sem consumo de tokens de IA
+                    urgency_level, matched_reasons = BaseScraper.classify_fiscal_urgency(item.title, item.raw_content)
 
-                    # 1. Processamento e síntese inteligente do conteúdo fiscal
+                    # Se configurado para revisar apenas urgências (alertas em vermelho), descarta rotinas informativas
+                    if settings.filter_only_urgent and urgency_level != "ALTO":
+                        total_filtered += 1
+                        logger.info(
+                            f"⏭️ [ECONOMIA DE TOKENS] Publicação rotineira/informativa ignorada: '{item.title}'. "
+                            f"(Nenhuma chamada à API Gemini realizada e nenhum alerta enviado ao Discord)"
+                        )
+                        # Salva no histórico do banco para não reprocessar no futuro
+                        if not dry_run:
+                            self.db.save_item(
+                                item_id=item_id,
+                                source=item.source,
+                                title=item.title,
+                                url=item.url,
+                                published_at=item.published_at,
+                                impact_level="INFORMATIVO",
+                                summary="Ignorado pelo filtro de urgência (economia de tokens).",
+                                erp_impact="Nenhum impacto crítico identificado.",
+                                sent_to_discord=False
+                            )
+                        continue
+
+                    total_new += 1
+                    reasons_str = ", ".join(matched_reasons) if matched_reasons else "Relevância fiscal identificada"
+                    logger.info(f"🚨 [URGÊNCIA ALTA / ALERTA VERMELHO] Item crítico detectado: '{item.title}' (Motivos: {reasons_str})")
+
+                    # 1. Processamento e síntese inteligente do conteúdo fiscal (somente aqui a IA é chamada!)
                     analysis = self.ai.analyze_fiscal_content(
                         source_name=item.source,
                         title=item.title,
                         content_text=item.raw_content,
                         url=item.url
                     )
+
+                    # Garante que itens críticos identificados sejam enviados com urgência ALTA (cor vermelha #E74C3C)
+                    if urgency_level == "ALTO":
+                        analysis["nivel_urgencia"] = "ALTO"
 
                     # 2. Download e arquivamento do arquivo oficial (PDF de NT, ZIP de Schemas)
                     attachment_data = None
@@ -97,7 +128,7 @@ class ObjectWatcher:
 
                     if dry_run:
                         logger.info(f"[DRY-RUN] Embed simulado para '{analysis.get('titulo_formatado')}':")
-                        logger.info(f"   Urgência: {analysis.get('nivel_urgencia')}")
+                        logger.info(f"   Urgência: {analysis.get('nivel_urgencia')} (Alerta Vermelho)")
                         logger.info(f"   Resumo: {analysis.get('resumo_executivo')}")
                         logger.info(f"   Regimes: {analysis.get('regimes_afetados')}")
                         logger.info(f"   Tags XML: {analysis.get('novos_campos_tags')}")
@@ -127,7 +158,7 @@ class ObjectWatcher:
                         title=item.title,
                         url=item.url,
                         published_at=item.published_at,
-                        impact_level=analysis.get("nivel_urgencia", "INFORMATIVO"),
+                        impact_level=analysis.get("nivel_urgencia", "ALTO"),
                         summary=analysis.get("resumo_executivo"),
                         erp_impact=f"Regimes: {analysis.get('regimes_afetados')} | Tags: {analysis.get('novos_campos_tags')}",
                         sent_to_discord=sent
@@ -141,12 +172,13 @@ class ObjectWatcher:
                 logger.error(f"Erro ao processar fonte '{scraper.name}': {e}", exc_info=True)
 
         logger.info(
-            f"=== Ciclo concluído: {total_scraped} itens verificados | "
-            f"{total_new} novos encontrados | {total_notified} alertas enviados ==="
+            f"=== Ciclo concluído: {total_scraped} verificados | {total_filtered} rotineiros ignorados (tokens salvos) | "
+            f"{total_new} urgentes processados | {total_notified} alertas enviados ==="
         )
 
         return {
             "total_scraped": total_scraped,
+            "total_filtered": total_filtered,
             "total_new": total_new,
             "total_notified": total_notified,
             "dry_run": dry_run

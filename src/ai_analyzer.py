@@ -20,6 +20,7 @@ class AIAnalyzer:
         self.model = model or settings.gemini_model
         self.timeout = settings.ai_timeout
         self.last_working_model: Optional[str] = None
+        self.exhausted_models: set[str] = set()
 
     def analyze_fiscal_content(
         self,
@@ -82,8 +83,8 @@ Você DEVE responder ESTRITAMENTE em formato JSON (sem blocos markdown adicionai
         # Lista ordenada de modelos para degradação graciosa (Cascata de Segurança)
         # Se os tokens/cota de um modelo esgotarem (HTTP 429), houver sobrecarga (HTTP 503) ou timeout,
         # o sistema desce automaticamente para o próximo modelo.
-        # Se já encontramos um modelo funcional no ciclo recente, prioriza ele para economizar tempo
-        preferred_models = [self.last_working_model] if self.last_working_model else []
+        # Se já encontramos um modelo funcional no ciclo recente, prioriza ele para economizar tempo.
+        preferred_models = [self.last_working_model] if self.last_working_model and self.last_working_model not in self.exhausted_models else []
 
         cascade_models = preferred_models + [
             self.model,
@@ -95,8 +96,11 @@ Você DEVE responder ESTRITAMENTE em formato JSON (sem blocos markdown adicionai
             "gemini-flash-latest",
             "gemini-flash-lite-latest",
         ]
-        # Remove duplicatas preservando a ordem
-        unique_models = list(dict.fromkeys(cascade_models))
+        unique_models = [m for m in dict.fromkeys(cascade_models) if m and m not in self.exhausted_models]
+
+        if not unique_models:
+            logger.info("Todos os modelos de IA da cascata esgotaram cota. Utilizando motor heurístico local.")
+            return None
 
         for model_name in unique_models:
             endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={self.api_key}"
@@ -109,18 +113,18 @@ Você DEVE responder ESTRITAMENTE em formato JSON (sem blocos markdown adicionai
                 "generationConfig": {
                     "temperature": 0.1,
                     "topP": 0.8,
-                    "maxOutputTokens": 1000,
+                    "maxOutputTokens": 1500,
                     "responseMimeType": "application/json"
                 }
             }
 
             try:
-                # Timeout ágil por modelo (12s) para não travar o fluxo caso haja lentidão
+                # Timeout ágil por modelo (10s) para não travar o fluxo caso haja lentidão
                 resp = requests.post(
                     endpoint,
                     json=payload,
                     headers={"Content-Type": "application/json"},
-                    timeout=12
+                    timeout=10
                 )
 
                 if resp.status_code == 200:
@@ -129,13 +133,18 @@ Você DEVE responder ESTRITAMENTE em formato JSON (sem blocos markdown adicionai
                     if candidates:
                         raw_text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
                         clean_json_str = self._clean_json(raw_text)
-                        parsed = json.loads(clean_json_str)
-                        self._normalize_parsed_fields(parsed)
-                        self.last_working_model = model_name
-                        logger.info(f"✅ Síntese fiscal gerada com sucesso via Gemini ({model_name}).")
-                        return parsed
+                        try:
+                            parsed = json.loads(clean_json_str)
+                            self._normalize_parsed_fields(parsed)
+                            self.last_working_model = model_name
+                            logger.info(f"✅ Síntese fiscal gerada com sucesso via Gemini ({model_name}).")
+                            return parsed
+                        except json.JSONDecodeError as je:
+                            logger.warning(f"Resposta JSON incompleta do modelo '{model_name}': {je}. Tentando próximo modelo...")
+                            continue
 
                 elif resp.status_code == 429:
+                    self.exhausted_models.add(model_name)
                     logger.warning(
                         f"⚠️ Tokens/Cota esgotados para o modelo '{model_name}' (HTTP 429). "
                         "Descendo automaticamente para o próximo modelo da cascata..."

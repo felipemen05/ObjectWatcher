@@ -84,3 +84,4 @@ def start_bot_listener(token: str | None = None):
         print("\nModo de escuta finalizado.")
     except Exception as e:
         logger.error(f"Erro ao executar bot listener: {e}")
+

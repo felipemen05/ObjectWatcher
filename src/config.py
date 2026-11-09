@@ -110,6 +110,13 @@ class Config:
         return path
 
     @property
+    def filter_only_urgent(self) -> bool:
+        env_val = os.getenv("FILTER_ONLY_URGENT")
+        if env_val is not None:
+            return env_val.lower() in ("1", "true", "yes", "sim")
+        return bool(self.raw_config.get("bot", {}).get("filter_only_urgent", True))
+
+    @property
     def color_urgent(self) -> int:
         return self.raw_config.get("bot", {}).get("colors", {}).get("urgent", 0xE74C3C)
 
