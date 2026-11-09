@@ -55,6 +55,7 @@ jobs:
           DISCORD_AVATAR_URL: ${{ secrets.DISCORD_AVATAR_URL || 'https://raw.githubusercontent.com/objectdata/objectwatcher/main/Foto_perfil.jpg' }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ secrets.GEMINI_MODEL || 'gemini-3.8-flash' }}
+          FILTER_ONLY_URGENT: 'true'
           ATTACH_FILES_TO_DISCORD: 'true'
           SAVE_LOCAL_ARCHIVE: 'false'
         run: |
