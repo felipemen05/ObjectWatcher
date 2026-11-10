@@ -59,10 +59,24 @@ class DatabaseManager:
         return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
     def is_processed(self, item_id: str) -> bool:
-        """Verifica se um item já foi processado e salvo no banco."""
+        """
+        Verifica se um item já foi processado e entregue com sucesso ao Discord
+        (ou deliberadamente descartado pelo filtro de urgência).
+        Se for um item de ALTA URGÊNCIA que não pôde ser enviado ao Discord por falta
+        de configuração temporária, retorna False para que seja reenviado assim que configurado.
+        """
         with self._get_connection() as conn:
-            cur = conn.execute("SELECT 1 FROM monitored_items WHERE id = ?", (item_id,))
-            return cur.fetchone() is not None
+            cur = conn.execute("SELECT sent_to_discord, impact_level FROM monitored_items WHERE id = ?", (item_id,))
+            row = cur.fetchone()
+            if not row:
+                return False
+            sent = bool(row["sent_to_discord"])
+            impact = row["impact_level"] or "INFORMATIVO"
+            # Se já foi enviado ao Discord ou foi ignorado pelo filtro (rotineiro), já está concluído
+            if sent or impact == "INFORMATIVO":
+                return True
+            # Se era ALTO e não foi enviado ao Discord (ex: canal não configurado no momento), tenta reenviar
+            return False
 
     def save_item(
         self,
