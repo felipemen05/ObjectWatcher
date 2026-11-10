@@ -60,10 +60,12 @@ class ObjectWatcher:
         total_notified = 0
 
         for scraper in self.scrapers:
-            logger.info(f"Consultando fonte: {scraper.name}...")
+            logger.info(f"Consultando fonte oficial: {scraper.name}...")
             try:
                 items = scraper.fetch_latest()
                 total_scraped += len(items)
+                source_new_count = 0
+                logger.info(f"  ✓ {scraper.name}: {len(items)} publicações ativas capturadas no portal em tempo real.")
 
                 for item in items:
                     # Gera chave única para deduplicação
@@ -81,7 +83,7 @@ class ObjectWatcher:
                     if settings.filter_only_urgent and urgency_level != "ALTO":
                         total_filtered += 1
                         logger.info(
-                            f"⏭️ [ECONOMIA DE TOKENS] Publicação rotineira/informativa ignorada: '{item.title}'. "
+                            f"  ⏭️ [ECONOMIA DE TOKENS] Publicação rotineira ignorada: '{item.title}'. "
                             f"(Nenhuma chamada à API Gemini realizada e nenhum alerta enviado ao Discord)"
                         )
                         # Salva no histórico do banco para não reprocessar no futuro
@@ -100,8 +102,9 @@ class ObjectWatcher:
                         continue
 
                     total_new += 1
+                    source_new_count += 1
                     reasons_str = ", ".join(matched_reasons) if matched_reasons else "Relevância fiscal identificada"
-                    logger.info(f"🚨 [URGÊNCIA ALTA / ALERTA VERMELHO] Item crítico detectado: '{item.title}' (Motivos: {reasons_str})")
+                    logger.info(f"  🚨 [URGÊNCIA ALTA / ALERTA VERMELHO] Novo item crítico detectado: '{item.title}' (Motivos: {reasons_str})")
 
                     # 1. Processamento e síntese inteligente do conteúdo fiscal (somente aqui a IA é chamada!)
                     analysis = self.ai.analyze_fiscal_content(
@@ -167,6 +170,9 @@ class ObjectWatcher:
                     if total_new >= max_new_per_run:
                         logger.warning(f"Limite máximo de {max_new_per_run} novos itens atingido para este ciclo.")
                         break
+
+                if source_new_count == 0:
+                    logger.info(f"  ℹ️ {scraper.name}: Portal verificado com sucesso. Nenhuma novidade publicada desde o último ciclo.")
 
             except Exception as e:
                 logger.error(f"Erro ao processar fonte '{scraper.name}': {e}", exc_info=True)
