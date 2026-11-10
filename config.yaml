@@ -21,7 +21,7 @@ bot:
 discord:
   webhook_url: ""          # Pode ser definido aqui ou via variável de ambiente DISCORD_WEBHOOK_URL
   bot_token: ""            # Opcional se usar Bot Token
-  channel_id: "1569358111519547537"  # Canal padrão (#geral) para envios no Discord
+  channel_id: "1119345774443114617"  # Canal oficial para envios no Discord
   rate_limit_delay_seconds: 1.5
   attach_files: true       # Envia arquivos (PDFs de NTs, ZIPs de Schemas) diretamente no Discord
   max_attachment_size_mb: 25
