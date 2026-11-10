@@ -52,7 +52,7 @@ class AIAnalyzer:
         content_text: str,
         url: str
     ) -> Optional[Dict[str, Any]]:
-        """Invoca a API do Google Gemini via REST JSON estruturado."""
+        """Invoca a API do Google Gemini via REST JSON estruturado para analisar um item fiscal."""
         # Limita o texto de entrada para economizar tokens mantendo o essencial (até ~4.000 caracteres)
         truncated_content = content_text[:4000]
 
@@ -79,7 +79,10 @@ Você DEVE responder ESTRITAMENTE em formato JSON (sem blocos markdown adicionai
   "nivel_urgencia": "ALTO (para novas rejeições que travam emissão, quebra de schema XSD ou paradas de serviço), MEDIO (para novos campos facultativos ou prazos futuros) ou INFORMATIVO (para comunicados normativos, manuais ou reuniões)."
 }}
 """
+        return self._call_gemini_prompt(prompt)
 
+    def _call_gemini_prompt(self, prompt: str) -> Optional[Dict[str, Any]]:
+        """Executa um prompt JSON estruturado na cascata de modelos do Google Gemini."""
         # Lista ordenada de modelos para degradação graciosa (Cascata de Segurança)
         # Se os tokens/cota de um modelo esgotarem (HTTP 429), houver sobrecarga (HTTP 503) ou timeout,
         # o sistema desce automaticamente para o próximo modelo.
@@ -181,6 +184,90 @@ Você DEVE responder ESTRITAMENTE em formato JSON (sem blocos markdown adicionai
 
         logger.info("🛡️ Todos os modelos de IA indisponíveis ou com tokens esgotados. Ativando Motor Heurístico Local.")
         return None
+
+    def generate_daily_digest(
+        self,
+        items: List[Dict[str, Any]],
+        date_str: str
+    ) -> Dict[str, Any]:
+        """
+        Compila e resume todas as publicações fiscais do dia em um briefing executivo consolidado para o time de ERP.
+        """
+        if not items:
+            return {
+                "titulo_digest": f"Fechamento Fiscal Diário • {date_str}",
+                "panorama_geral": "Nenhuma alteração fiscal crítica ou regra de validação foi publicada nos portais monitorados hoje.",
+                "principais_mudancas": ["Portais da SEFAZ, NFS-e e Receita Federal operando em estabilidade sem publicações impeditivas hoje."],
+                "atencao_desenvolvedores": "Nenhuma ação corretiva ou atualização de layout necessária no ERP para o dia de hoje.",
+                "prazos_urgentes": "Manter o cronograma regular de homologação e emissão.",
+                "nivel_atencao_geral": "INFORMATIVO"
+            }
+
+        itens_formatados = []
+        for idx, item in enumerate(items[:10], start=1):
+            source = item.get("source", "Portal Fiscal")
+            title = item.get("title", "Sem título")
+            summary = item.get("summary") or item.get("erp_impact") or ""
+            itens_formatados.append(f"{idx}. [{source}] {title}\n   Detalhes: {summary[:250]}")
+
+        bloco_itens = "\n\n".join(itens_formatados)
+
+        prompt = f"""
+Você é o Arquiteto de Software e Engenheiro de Integrações Fiscais Sênior da empresa ObjectData (sistema ERP).
+Gere o RELATÓRIO DE FECHAMENTO FISCAL DIÁRIO ({date_str}) consolidando todas as novidades fiscais do dia para a equipe de tecnologia.
+
+PUBLICAÇÕES DO DIA:
+\"\"\"
+{bloco_itens}
+\"\"\"
+
+Você DEVE responder ESTRITAMENTE em formato JSON (sem blocos markdown adicionais em volta ou com ```json ... ```) com as seguintes chaves:
+{{
+  "titulo_digest": "Fechamento Fiscal Diário • {date_str}",
+  "panorama_geral": "Visão geral e executiva do dia em exatas 2 ou 3 frases claras, sintetizando o impacto global nas operações do ERP.",
+  "principais_mudancas": [
+    "Resumo em tópicos concisos das mudanças mais importantes (máximo 4 tópicos diretos)"
+  ],
+  "atencao_desenvolvedores": "Diretrizes práticas para o time de desenvolvimento (ex: novas tags XML a testar, schemas a atualizar, regras de validação para conferir).",
+  "prazos_urgentes": "Destaque dos prazos mais críticos mencionados (ou 'Nenhum prazo imediato reportado hoje').",
+  "nivel_atencao_geral": "ALTO (se houver rejeições ou quebras de schema) ou MEDIO (se forem apenas prazos ou evoluções) ou INFORMATIVO"
+}}
+"""
+        if self.api_key and self.api_key.strip() and self.api_key != "sua_chave_gemini_aqui":
+            try:
+                res = self._call_gemini_prompt(prompt)
+                if res:
+                    return res
+            except Exception as e:
+                logger.warning(f"Falha ao gerar resumo diário via Gemini ({e}). Usando gerador heurístico.")
+
+        return self._heuristic_daily_digest(items, date_str)
+
+    def _heuristic_daily_digest(self, items: List[Dict[str, Any]], date_str: str) -> Dict[str, Any]:
+        """Motor heurístico para gerar o resumo diário se a API de IA estiver indisponível."""
+        if not items:
+            return {
+                "titulo_digest": f"Fechamento Fiscal Diário • {date_str}",
+                "panorama_geral": "Nenhuma alteração fiscal crítica ou regra de validação impeditiva foi publicada hoje.",
+                "principais_mudancas": ["Portais fiscais operando em estabilidade sem impactos imediatos nas emissões de notas."],
+                "atencao_desenvolvedores": "Manter rotinas padrão de monitoramento e testes.",
+                "prazos_urgentes": "Sem prazos emergenciais reportados hoje.",
+                "nivel_atencao_geral": "INFORMATIVO"
+            }
+
+        mudancas = []
+        for it in items[:5]:
+            title = it.get("title", "Comunicado Fiscal")
+            mudancas.append(f"• {title}")
+
+        return {
+            "titulo_digest": f"Fechamento Fiscal Diário • {date_str}",
+            "panorama_geral": f"Foram registradas {len(items)} publicação(ões) fiscal(is) relevante(s) nos portais governamentais hoje.",
+            "principais_mudancas": mudancas,
+            "atencao_desenvolvedores": "Revisar possíveis adequações de leiaute, tags XML e regras de validação apontadas nas publicações.",
+            "prazos_urgentes": "Verificar os prazos individuais detalhados nos alertas de cada publicação.",
+            "nivel_atencao_geral": "ALTO" if any(it.get("impact_level") == "ALTO" for it in items) else "MEDIO"
+        }
 
     @staticmethod
     def _normalize_parsed_fields(parsed: Dict[str, Any]) -> None:

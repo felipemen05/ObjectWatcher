@@ -26,6 +26,13 @@ discord:
   attach_files: true       # Envia arquivos (PDFs de NTs, ZIPs de Schemas) diretamente no Discord
   max_attachment_size_mb: 25
 
+# Resumo Executivo Diário (Digest das 17:30)
+daily_digest:
+  enabled: true
+  time: "17:30"             # Horário de fechamento (horário de Brasília)
+  color: 0x9B59B6           # Roxo sofisticado para o Fechamento Diário (#9B59B6)
+  include_all_critical: true # Se não houver novos alertas hoje, resume as últimas novidades críticas
+
 storage:
   save_local_archive: true # Salva cópia local em pasta datada (downloads/YYYY-MM-DD/)
   archive_dir: "downloads"

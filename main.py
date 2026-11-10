@@ -102,6 +102,16 @@ def main():
         help="Exibe estatísticas de itens já capturados e salvos no banco SQLite."
     )
     parser.add_argument(
+        "--daily-digest",
+        action="store_true",
+        help="Executa o Fechamento Fiscal Diário das 17:30 compilando todas as novidades fiscais do dia."
+    )
+    parser.add_argument(
+        "--force-digest",
+        action="store_true",
+        help="Força a execução do Resumo Diário mesmo se já tiver sido enviado na data de hoje."
+    )
+    parser.add_argument(
         "-v", "--verbose",
         action="store_true",
         help="Habilita logs detalhados de depuração (DEBUG)."
@@ -207,6 +217,19 @@ def main():
         for lvl, count in stats["by_impact"].items():
             print(f"  • {lvl}: {count}")
         print("==================================================\n")
+        sys.exit(0)
+
+    # 5.5 Comando de Fechamento Diário
+    if args.daily_digest:
+        print("\n[ObjectWatcher] Executando Fechamento Fiscal Diário das 17:30...")
+        watcher = ObjectWatcher()
+        if args.channel_id:
+            watcher.notifier.channel_id = args.channel_id.strip()
+        success = watcher.run_daily_digest(force=args.force_digest, dry_run=args.dry_run)
+        if success:
+            print("[ObjectWatcher] Resumo Diário processado com sucesso!\n")
+        else:
+            print("[ObjectWatcher] Resumo Diário não disparado (já enviado hoje ou desativado).\n")
         sys.exit(0)
 
     # 6. Execução do Monitor

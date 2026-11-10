@@ -182,6 +182,10 @@ class ObjectWatcher:
             f"{total_new} urgentes processados | {total_notified} alertas enviados ==="
         )
 
+        # Verifica se atingiu o horário do Fechamento Diário das 17:30
+        if settings.daily_digest_enabled and not dry_run:
+            self.check_and_trigger_daily_digest(dry_run=dry_run)
+
         return {
             "total_scraped": total_scraped,
             "total_filtered": total_filtered,
@@ -189,6 +193,71 @@ class ObjectWatcher:
             "total_notified": total_notified,
             "dry_run": dry_run
         }
+
+    def check_and_trigger_daily_digest(self, dry_run: bool = False) -> bool:
+        """
+        Verifica se atingiu o horário configurado de fechamento (17:30 BRT) e se
+        o resumo diário de hoje ainda não foi enviado.
+        """
+        if not settings.daily_digest_enabled:
+            return False
+
+        from datetime import timezone, timedelta
+        brt_tz = timezone(timedelta(hours=-3))
+        now_brt = datetime.now(brt_tz)
+        today_str = now_brt.strftime("%Y-%m-%d")
+        current_time = now_brt.strftime("%H:%M")
+
+        target_time = settings.daily_digest_time
+        if current_time >= target_time:
+            if not self.db.has_daily_digest_run_today(today_str):
+                logger.info(f"⏰ Horário de Fechamento Diário atingido ({current_time} >= {target_time}). Disparando Resumo Diário...")
+                return self.run_daily_digest(force=False, dry_run=dry_run)
+        return False
+
+    def run_daily_digest(self, force: bool = False, dry_run: bool = False) -> bool:
+        """
+        Gera e envia o Resumo Executivo Diário consolidando todas as novidades fiscais do dia.
+        """
+        from datetime import timezone, timedelta
+        brt_tz = timezone(timedelta(hours=-3))
+        now_brt = datetime.now(brt_tz)
+        today_str = now_brt.strftime("%Y-%m-%d")
+        date_formatted = now_brt.strftime("%d/%m/%Y")
+
+        if not force and self.db.has_daily_digest_run_today(today_str):
+            logger.info(f"O resumo diário de hoje ({today_str}) já foi enviado. Use force=True para reenviar.")
+            return False
+
+        logger.info(f"📊 Compilando publicações do dia para o Resumo Executivo ({date_formatted})...")
+        items = self.db.get_items_for_daily_digest(hours=24)
+        logger.info(f"Obtidos {len(items)} itens para compor a síntese diária.")
+
+        # Gera o resumo inteligente via IA (ou fallback)
+        digest = self.ai.generate_daily_digest(items=items, date_str=date_formatted)
+
+        if dry_run:
+            logger.info(f"[DRY-RUN] Resumo Diário das 17:30 simulado com sucesso:")
+            logger.info(f"   Título: {digest.get('titulo_digest')}")
+            logger.info(f"   Panorama: {digest.get('panorama_geral')}")
+            logger.info(f"   Mudanças: {digest.get('principais_mudancas')}")
+            logger.info(f"   Atenção ERP: {digest.get('atencao_desenvolvedores')}")
+            logger.info(f"   Prazos: {digest.get('prazos_urgentes')}")
+            return True
+
+        sent = self.notifier.send_daily_digest(
+            digest=digest,
+            date_str=date_formatted,
+            items_count=len(items)
+        )
+
+        if sent:
+            self.db.mark_daily_digest_run(today_str)
+            logger.info(f"✅ Fechamento fiscal diário de {date_formatted} enviado com sucesso ao Discord!")
+            return True
+        else:
+            logger.error("Falha ao enviar resumo diário para o canal do Discord.")
+            return False
 
     def _save_to_local_archive(self, attachment: tuple[str, bytes], source_name: str) -> None:
         """Salva uma cópia local organizada por data no diretório de downloads."""

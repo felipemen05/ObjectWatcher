@@ -177,6 +177,70 @@ class DiscordNotifier:
 
         return self._post_payload(payload, attachment=attachment)
 
+    def send_daily_digest(
+        self,
+        digest: Dict[str, Any],
+        date_str: str,
+        items_count: int
+    ) -> bool:
+        """
+        Envia o Embed consolidado do Fechamento Fiscal Diário das 17:30 para o canal do Discord.
+        """
+        if not self._is_configured():
+            logger.warning("Discord não configurado para envio do Resumo Diário.")
+            return False
+
+        color = settings.color_digest  # Roxo #9B59B6
+        titulo = digest.get("titulo_digest", f"Fechamento Fiscal Diário • {date_str}")
+        panorama = digest.get("panorama_geral", "Resumo das alterações fiscais apuradas no dia de hoje.")
+        mudancas = digest.get("principais_mudancas", [])
+        atencao = digest.get("atencao_desenvolvedores", "Acompanhar as notas técnicas em ambiente de homologação.")
+        prazos = digest.get("prazos_urgentes", "Manter atenção aos prazos normativos em vigor.")
+
+        if isinstance(mudancas, list):
+            mudancas_str = "\n".join(f"• {m}" for m in mudancas)
+        else:
+            mudancas_str = str(mudancas)
+
+        fields = [
+            {
+                "name": f"📋 Principais Mudanças Apuradas Hoje ({items_count} publicação{'ões' if items_count != 1 else ''})",
+                "value": mudancas_str[:1000] if mudancas_str else "Nenhuma alteração impeditiva registrada.",
+                "inline": False
+            },
+            {
+                "name": "💻 Diretrizes Técnicas para o Time ERP",
+                "value": str(atencao)[:1000],
+                "inline": False
+            },
+            {
+                "name": "📅 Prazos & Cronograma Regulatório",
+                "value": str(prazos)[:1000],
+                "inline": False
+            }
+        ]
+
+        embed = {
+            "title": f"📊 {titulo}",
+            "description": f"**Panorama Geral do Dia:**\n{panorama[:2000]}",
+            "color": color,
+            "fields": fields,
+            "footer": {
+                "text": "ObjectWatcher • Fechamento Fiscal das 17:30 • ObjectData ERP",
+                "icon_url": self.avatar_url
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+        payload = {
+            "username": self.bot_name,
+            "avatar_url": self.avatar_url,
+            "embeds": [embed]
+        }
+
+        logger.info(f"Enviando Resumo Diário das 17:30 para o Discord ({items_count} itens consolidados)...")
+        return self._post_payload(payload)
+
     def send_test_message(self) -> bool:
         """Envia uma mensagem de teste para verificar a integridade da conexão com o Discord."""
         if not self._is_configured():

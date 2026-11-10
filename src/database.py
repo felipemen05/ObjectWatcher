@@ -136,6 +136,45 @@ class DatabaseManager:
             """, (key, str(value)))
             conn.commit()
 
+    def get_items_for_daily_digest(self, hours: int = 24, fallback_limit: int = 5) -> List[Dict[str, Any]]:
+        """
+        Retorna as publicações fiscais relevantes das últimas horas para compor o Resumo Diário.
+        Prioriza itens enviados ao Discord ou de alta criticidade.
+        Se nenhuma notícia tiver sido postada hoje, busca as últimas novidades críticas cadastradas.
+        """
+        with self._get_connection() as conn:
+            # 1. Busca itens enviados ou classificados como ALTO/MEDIO nas últimas 'hours' horas
+            cur = conn.execute("""
+                SELECT source, title, url, published_at, created_at, impact_level, summary, erp_impact, sent_to_discord
+                FROM monitored_items
+                WHERE datetime(created_at) >= datetime('now', ?)
+                  AND (sent_to_discord = 1 OR impact_level IN ('ALTO', 'MEDIO'))
+                ORDER BY created_at ASC
+            """, (f"-{hours} hours",))
+            items = [dict(row) for row in cur.fetchall()]
+
+            # 2. Se não houver itens no período, pega as últimas novidades críticas para compor o briefing
+            if not items:
+                cur_fallback = conn.execute("""
+                    SELECT source, title, url, published_at, created_at, impact_level, summary, erp_impact, sent_to_discord
+                    FROM monitored_items
+                    WHERE impact_level IN ('ALTO', 'MEDIO')
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                """, (fallback_limit,))
+                items = [dict(row) for row in cur_fallback.fetchall()]
+
+            return items
+
+    def has_daily_digest_run_today(self, date_str: str) -> bool:
+        """Verifica se o resumo diário das 17:30 já foi disparado na data informada (YYYY-MM-DD)."""
+        last_date = self.get_setting("last_daily_digest_date")
+        return last_date == date_str
+
+    def mark_daily_digest_run(self, date_str: str) -> None:
+        """Registra a conclusão do envio do resumo diário para a data informada."""
+        self.set_setting("last_daily_digest_date", date_str)
+
     def get_stats(self) -> Dict[str, Any]:
         """Retorna estatísticas de monitoramento."""
         with self._get_connection() as conn:

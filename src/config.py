@@ -129,6 +129,21 @@ class Config:
         return self.raw_config.get("bot", {}).get("colors", {}).get("info", 0x3498DB)
 
     @property
+    def color_digest(self) -> int:
+        return self.raw_config.get("daily_digest", {}).get("color", 0x9B59B6)
+
+    @property
+    def daily_digest_enabled(self) -> bool:
+        env_val = os.getenv("DAILY_DIGEST_ENABLED")
+        if env_val is not None:
+            return env_val.lower() in ("1", "true", "yes", "sim")
+        return bool(self.raw_config.get("daily_digest", {}).get("enabled", True))
+
+    @property
+    def daily_digest_time(self) -> str:
+        return os.getenv("DAILY_DIGEST_TIME") or self.raw_config.get("daily_digest", {}).get("time", "17:30")
+
+    @property
     def rate_limit_delay(self) -> float:
         return float(self.raw_config.get("discord", {}).get("rate_limit_delay_seconds", 1.5))
 
