@@ -7,7 +7,7 @@ Possui fallback determinístico automático caso a chave de API não esteja conf
 import json
 import logging
 import re
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import requests
 from src.config import settings
 
