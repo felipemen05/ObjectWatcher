@@ -74,6 +74,26 @@ class DiscordNotifier:
         has_bot_token = bool(self.bot_token and self.channel_id)
         return has_webhook or has_bot_token
 
+    @staticmethod
+    def _sanitize_url(raw_url: Optional[str]) -> Optional[str]:
+        """
+        Sanitiza URLs para o formato estrito do Discord (RFC 3986).
+        Remove espaços e codifica caracteres inválidos para evitar o erro 50035 (URL_TYPE_INVALID_URL).
+        """
+        if not raw_url or not isinstance(raw_url, str):
+            return None
+        clean = raw_url.strip()
+        if not clean.startswith(("http://", "https://")):
+            return None
+        try:
+            import urllib.parse
+            parsed = urllib.parse.urlsplit(clean)
+            clean_path = urllib.parse.quote(parsed.path, safe="/:@&+$,;=-_.~*'")
+            clean_query = urllib.parse.quote(parsed.query, safe="/:@&+$,;=-_.~*'?=")
+            return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, clean_path, clean_query, parsed.fragment))
+        except Exception:
+            return clean.replace(" ", "%20")
+
     def send_fiscal_alert(
         self,
         analysis: Dict[str, Any],
@@ -146,9 +166,13 @@ class DiscordNotifier:
                 "inline": False
             })
 
+        # Sanitiza a URL para evitar erros de validação do Discord (URL_TYPE_INVALID_URL)
+        clean_url = self._sanitize_url(url)
+        link_display = clean_url or "https://www.nfe.fazenda.gov.br"
+
         fields.append({
             "name": "🔗 Link Oficial / Portal",
-            "value": f"[Acessar Conteúdo no Portal Oficial]({url})",
+            "value": f"[Acessar Conteúdo no Portal Oficial]({link_display})",
             "inline": False
         })
 
@@ -159,7 +183,6 @@ class DiscordNotifier:
         embed = {
             "title": title[:250],
             "description": f"**Resumo Executivo:**\n{resumo[:2000]}",
-            "url": url,
             "color": color,
             "fields": fields,
             "footer": {
@@ -168,6 +191,8 @@ class DiscordNotifier:
             },
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
+        if clean_url:
+            embed["url"] = clean_url
 
         payload = {
             "username": self.bot_name,

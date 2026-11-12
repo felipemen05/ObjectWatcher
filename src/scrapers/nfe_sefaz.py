@@ -58,7 +58,7 @@ class NFeSefazScraper(BaseScraper):
         
         # Procura por links de informes (ex: informe.aspx?ehCTG=false&Informe=...)
         for a in soup.find_all("a", href=True):
-            href = a["href"]
+            href = a["href"].strip().replace(" ", "%20")
             if "informe.aspx" in href and "Informe=" in href:
                 title = a.get_text(strip=True)
                 if not title or title.lower() in ["...(leia mais)", "leia mais", "ver mais"]:
@@ -111,7 +111,8 @@ class NFeSefazScraper(BaseScraper):
                 
                 # O link direto do PDF é o elemento <a> pai do span
                 a_tag = span.find_parent("a") or span.find("a")
-                pdf_url = urljoin(BASE_NFE_URL, a_tag["href"]) if (a_tag and a_tag.get("href")) else self.nt_url
+                raw_href = a_tag["href"].strip().replace(" ", "%20") if (a_tag and a_tag.get("href")) else ""
+                pdf_url = urljoin(BASE_NFE_URL, raw_href) if raw_href else self.nt_url
 
                 # Extrai a descrição específica da NT a partir dos elementos irmãos
                 desc_parts = []
@@ -164,7 +165,8 @@ class NFeSefazScraper(BaseScraper):
             for span in spans[:5]:
                 title = span.get_text(strip=True)
                 a_tag = span.find_parent("a") or span.find("a")
-                file_url = urljoin(BASE_NFE_URL, a_tag["href"]) if (a_tag and a_tag.get("href")) else self.schemas_url
+                raw_href = a_tag["href"].strip().replace(" ", "%20") if (a_tag and a_tag.get("href")) else ""
+                file_url = urljoin(BASE_NFE_URL, raw_href) if raw_href else self.schemas_url
 
                 results.append(ScrapedItem(
                     source=self.name,
@@ -195,7 +197,8 @@ class NFeSefazScraper(BaseScraper):
             for span in spans[:4]:
                 title = span.get_text(strip=True)
                 a_tag = span.find_parent("a") or span.find("a")
-                file_url = urljoin(BASE_NFE_URL, a_tag["href"]) if (a_tag and a_tag.get("href")) else self.informes_url
+                raw_href = a_tag["href"].strip().replace(" ", "%20") if (a_tag and a_tag.get("href")) else ""
+                file_url = urljoin(BASE_NFE_URL, raw_href) if raw_href else self.informes_url
 
                 results.append(ScrapedItem(
                     source=self.name,

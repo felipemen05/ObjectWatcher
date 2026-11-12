@@ -105,6 +105,7 @@ class BaseScraper(ABC):
         Retorna uma tupla (nome_do_arquivo, conteudo_em_bytes) ou None em caso de falha.
         """
         try:
+            url = url.strip().replace(" ", "%20")
             logger.debug(f"Iniciando download do arquivo anexo: {url}")
             resp = self.session.get(url, stream=True, timeout=30)
             if resp.status_code != 200:
@@ -184,6 +185,7 @@ class BaseScraper(ABC):
         das primeiras páginas em memória para alimentar a inteligência artificial.
         """
         try:
+            pdf_url = pdf_url.strip().replace(" ", "%20")
             logger.debug(f"Baixando PDF para análise: {pdf_url}")
             resp = self.session.get(pdf_url, timeout=20)
             if resp.status_code != 200:
